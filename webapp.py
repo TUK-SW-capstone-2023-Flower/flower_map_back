@@ -21,112 +21,50 @@ import re
 import requests
 import shutil
 import time
-from flask import send_file
+from flask import send_file, jsonify
+from collections import Counter
 
 app = Flask(__name__)
-
-# @app.route("/")
-# def hello_world():
-#     return render_template('index.html')
-
-# function for accessing rtsp stream
-# @app.route("/rtsp_feed")
-# def rtsp_feed():
-    # cap = cv2.VideoCapture('rtsp://admin:hello123@192.168.29.126:554/cam/realmonitor?channel=1&subtype=0')
-    # return render_template('index.html')
-
-
-# Function to start webcam and detect objects
-
-# @app.route("/webcam_feed")
-# def webcam_feed():
-    # #source = 0
-    # cap = cv2.VideoCapture(0)
-    # return render_template('index.html')
-
-# function to get the frames from video (output video)
-
-# def get_frame():
-#     folder_path = 'runs/detect'
-#     subfolders = [f for f in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, f))]    
-#     latest_subfolder = max(subfolders, key=lambda x: os.path.getctime(os.path.join(folder_path, x)))
-#     filename = predict_img.imgpath    
-#     image_path = folder_path+'/'+latest_subfolder+'/'+filename    
-#     video = cv2.VideoCapture(image_path)  # detected video path
-#     #video = cv2.VideoCapture("video.mp4")
-#     while True:
-#         success, image = video.read()
-#         if not success:
-#             break
-#         ret, jpeg = cv2.imencode('.jpg', image)   
-#         yield (b'--frame\r\n'
-#                b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n\r\n')   
-#         time.sleep(0.1)  #control the frame rate to display one frame every 100 milliseconds: 
-
-
-# # function to display the detected objects video on html page
-# @app.route("/video_feed")
-# def video_feed():
-#     return Response(get_frame(),
-#                     mimetype='multipart/x-mixed-replace; boundary=frame')
-
-
-
-#The display function is used to serve the image or video from the folder_path directory.
-# @app.route('/<path:filename>')
-# def display(filename):
-#     folder_path = 'runs/detect'
-#     subfolders = [f for f in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, f))]    
-#     latest_subfolder = max(subfolders, key=lambda x: os.path.getctime(os.path.join(folder_path, x)))    
-#     directory = folder_path+'/'+latest_subfolder
-#     print("printing directory: ",directory)  
-#     filename = predict_img.imgpath
-#     file_extension = filename.rsplit('.', 1)[1].lower()
-#     #print("printing file extension from display function : ",file_extension)
-#     environ = request.environ
-#     if file_extension == 'jpg':      
-#         return send_from_directory(directory,filename,environ)
-
-#     elif file_extension == 'mp4':
-#         return render_template('index.html')
-
-#     else:
-#         return "Invalid file format"
 
     
 @app.route("/", methods=["POST"])
 def predict_img():
+    names = [ 'paper', 'paper_pack', 'paper_cup','can','reusable_glass','brown_glass','green_glass','white_glass','etc_glass','pet','plastic','vinyl','paper_dirty','paper_cup_dirty','can_dirty','etc_glass_dirty','pet_dirty_packaging','pet_dirty','plastic_dirty','vinyl_dirty','reusable_glass_packaging','brown_glass_packaging','green_glass_packaging','white_glass_packaging','pet_packaging','white_Styrofoam','color_Styrofoam','Styrofoam_dirty','battery']
     
     if 'file' not in request.files:
         print("nononono")
         return
-
+    
     f = request.files['file']
     basepath = os.path.dirname(__file__)
-    filepath = os.path.join(basepath,'uploads',f.filename)
+    filepath = os.path.join(basepath,'uploads.jpg')
     f.save(filepath)
+    
+    img = Image.open('uploads.jpg')
+    img_resized = img.resize((640,640))
+    img_resized.save('uploads.jpg')
 
-    file_extension = f.filename.rsplit('.', 1)[1].lower()    
-    if file_extension == 'jpg':
-        process = Popen(["python3", "detect.py", '--source', filepath, "--weights","best.pt"], shell=False)
-        process.wait()
+    process = Popen(["python3", "detect.py", '--source', filepath,"--save-txt", "--weights","best.pt",'--name','result','--conf-thres','0.4'], shell=False)
+    process.wait()
     
     folder_path = 'runs/detect'
     subfolders = [f for f in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, f))]    
     latest_subfolder = max(subfolders, key=lambda x: os.path.getctime(os.path.join(folder_path, x)))    
-    image_path = folder_path+'/'+latest_subfolder+'/'+f.filename
+    image_path = folder_path+'/'+latest_subfolder+'/'+'uploads.jpg'
+    label_path = folder_path+'/'+latest_subfolder+'/labels/uploads.txt'
     
+    labels = [] 
+    with open(label_path, 'r') as file:
+        for line in file:
+            label = line.split()[0]
+            labels.append(names[int(label)])
+    element_count = Counter(labels)
+    print(element_count)
     
-    # img = cv2.imread(filepath)
-    # result = model(img)
-    # df = result.pandas().xyxy[0]
-
-    # for _, row in df.iterrows():
-    #     cv2.rectangle(img, (int(row['xmin']), int(row['ymin'])),(int(row['xmax']), int(row['ymax'])), (255,155,0), 2)
-    # cv2.imwrite('runs/detect/result.jpg',img)
+    # element_count가 쓰레기 종류:개수 적혀있는 Counter 객체
+    # image_path가 이미지가 결과 이미지 저장되어있는 경로
     
     return send_file(image_path,mimetype='image/jpeg')
-    #return "done"
 
 
 
