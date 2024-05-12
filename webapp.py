@@ -26,6 +26,26 @@ from collections import Counter
 
 app = Flask(__name__)
 
+def resize_and_pad_image(input_image, target_size, color=(0, 0, 0)):
+    
+    height, width = input_image.shape[:2]
+    target_width, target_height = target_size
+
+    # 대상 크기에 맞게 이미지의 비율을 유지하면서 리사이징합니다.
+    scale = min(target_width/width, target_height/height)
+    resized_width = int(width * scale)
+    resized_height = int(height * scale)
+    resized_image = cv2.resize(input_image, (resized_width, resized_height), interpolation=cv2.INTER_AREA)
+    
+    # 패딩을 추가합니다.
+    top_padding = (target_height - resized_height) // 2
+    bottom_padding = target_height - resized_height - top_padding
+    left_padding = (target_width - resized_width) // 2
+    right_padding = target_width - resized_width - left_padding
+    padded_image = cv2.copyMakeBorder(resized_image, top_padding, bottom_padding, left_padding, right_padding, cv2.BORDER_CONSTANT, value=color)
+    
+    return padded_image
+
     
 @app.route("/", methods=["POST"])
 def predict_img():
@@ -40,11 +60,17 @@ def predict_img():
     filepath = os.path.join(basepath,'uploads.jpg')
     f.save(filepath)
     
-    img = Image.open('uploads.jpg')
-    img_resized = img.resize((640,640))
-    img_resized.save('uploads.jpg')
+    input_image = cv2.imread('uploads.jpg')
+    target_size = (640, 640)
+    padded_image = resize_and_pad_image(input_image, target_size)
+    cv2.imwrite('uploads.jpg', padded_image)
+    
+    
+    # img = Image.open('uploads.jpg')
+    # img_resized = img.resize((640,640))
+    # img_resized.save('uploads.jpg')
 
-    process = Popen(["python3", "detect.py", '--source', filepath,"--save-txt", "--weights","best.pt",'--name','result','--conf-thres','0.4'], shell=False)
+    process = Popen(["python3", "detect.py", '--source', filepath,"--save-txt", "--weights","best.pt",'--name','result','--conf-thres','0.6'], shell=False)
     process.wait()
     
     folder_path = 'runs/detect'
@@ -55,12 +81,15 @@ def predict_img():
     
     labels = [] 
     with open(label_path, 'r') as file:
-        for line in file:
-            label = line.split()[0]
-            labels.append(names[int(label)])
-    element_count = Counter(labels)
-    print(element_count)
-    
+        try:
+            for line in file:
+                label = line.split()[0]
+                labels.append(names[int(label)])
+            element_count = Counter(labels)
+            print(element_count)
+        except:
+            print('There is no trash')
+
     # element_count가 쓰레기 종류:개수 적혀있는 Counter 객체
     # image_path가 이미지가 결과 이미지 저장되어있는 경로
     
